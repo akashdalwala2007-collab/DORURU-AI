@@ -53,4 +53,53 @@ RAG_TOP_K = int(os.getenv("RAG_TOP_K", "3"))
 RAG_MIN_SIMILARITY_SCORE = float(os.getenv("RAG_MIN_SIMILARITY_SCORE", "0.15"))
 EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "tfidf_local")
 
+# Local Speech Configuration (Phase 7 Candidates)
+TTS_MODEL_PATH = os.getenv("TTS_MODEL_PATH", "backend/models/piper/en_US-lessac-medium.onnx")
+TTS_CONFIG_PATH = os.getenv("TTS_CONFIG_PATH", "backend/models/piper/en_US-lessac-medium.onnx.json")
+TTS_TIMEOUT_SECONDS = float(os.getenv("TTS_TIMEOUT_SECONDS", "10.0"))
+STT_MODEL_PATH = os.getenv("STT_MODEL_PATH", "base.en")
+STT_COMPUTE_TYPE = os.getenv("STT_COMPUTE_TYPE", "auto")
+STT_TIMEOUT_SECONDS = float(os.getenv("STT_TIMEOUT_SECONDS", "10.0"))
+COMPUTE_DEVICE = os.getenv("COMPUTE_DEVICE", "auto")
+
+
+class Settings:
+    """Application settings for speech synthesis and recognition services."""
+
+    def __init__(
+        self,
+        ENVIRONMENT: str = "development",
+        COMPUTE_DEVICE: str = "auto",
+        STT_MODEL_PATH: str = "base.en",
+        STT_COMPUTE_TYPE: str = "auto",
+        STT_TIMEOUT_SECONDS: float = 10.0,
+        TTS_MODEL_PATH: str = "backend/models/piper/en_US-lessac-medium.onnx",
+        TTS_CONFIG_PATH: str = "backend/models/piper/en_US-lessac-medium.onnx.json",
+        TTS_TIMEOUT_SECONDS: float = 10.0,
+        **kwargs,
+    ):
+        self.ENVIRONMENT = ENVIRONMENT
+        self.COMPUTE_DEVICE = COMPUTE_DEVICE
+        self.STT_MODEL_PATH = STT_MODEL_PATH
+        self.STT_COMPUTE_TYPE = STT_COMPUTE_TYPE
+        self.STT_TIMEOUT_SECONDS = STT_TIMEOUT_SECONDS
+        self.TTS_MODEL_PATH = TTS_MODEL_PATH
+        self.TTS_CONFIG_PATH = TTS_CONFIG_PATH
+        self.TTS_TIMEOUT_SECONDS = TTS_TIMEOUT_SECONDS
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+
+
+def get_settings() -> Settings:
+    """Retrieve application settings instance."""
+    return Settings(
+        COMPUTE_DEVICE=COMPUTE_DEVICE,
+        STT_MODEL_PATH=STT_MODEL_PATH,
+        STT_COMPUTE_TYPE=STT_COMPUTE_TYPE,
+        STT_TIMEOUT_SECONDS=STT_TIMEOUT_SECONDS,
+        TTS_MODEL_PATH=TTS_MODEL_PATH,
+        TTS_CONFIG_PATH=TTS_CONFIG_PATH,
+        TTS_TIMEOUT_SECONDS=TTS_TIMEOUT_SECONDS,
+    )
+
 
