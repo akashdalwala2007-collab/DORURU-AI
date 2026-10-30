@@ -1,0 +1,605 @@
+DORURU-AI — PHASE-WISE MASTER PROMPTS
+=====================================
+
+Repository: https://github.com/akashdalwala2007-collab/DORURU-AI
+Robot name: DORURU (never call it WALL-E)
+Target controller: Seeed XIAO ESP32-S3 Sense
+Document purpose: Sequential, phase-wise implementation prompts for Antigravity + installed GSD workflow.
+
+IMPORTANT EXECUTION RULES — APPLY TO EVERY PHASE
+------------------------------------------------
+1. NEVER run git commit, git push, gh repo sync, or any command/API/action that publishes changes to GitHub.
+2. NEVER create a commit automatically. NEVER push directly to GitHub. NEVER open a pull request unless the user separately asks.
+3. Work only in the already-open local repository. Local file edits are allowed. Do not change remotes, repository visibility, branch protection, or GitHub settings.
+4. Before editing, inspect the existing repository, current branch, working tree, project files, installed tools, and existing GSD planning state. Do not overwrite existing work.
+5. Do not assume the repository is empty just because an online view appears empty. Verify the actual local checkout. If the local checkout is missing or is not the expected repository, STOP and report; do not clone, initialize, or replace it without permission.
+6. Never expose API keys, tokens, Wi-Fi passwords, credentials, or private personal data. Use environment variables and a .env.example containing placeholders only. Ensure .env and secrets are gitignored.
+7. Do not fabricate test results, hardware validation, sensor availability, model performance, latency, battery life, or college facts.
+8. Treat all currently connected hardware as working for planning purposes, as explicitly requested by the user. Do not spend implementation phases repeating basic component verification. Preserve the confirmed wiring and pin assignments exactly. Do not redesign wiring.
+9. If a required hardware capability is not confirmed (for example distance sensors, wheel encoders, SD card, battery voltage/current rating), build a clean interface and safe disabled state. Do not claim the capability works or invent a pin.
+10. Keep implementation modular, readable, and suitable for a student robotics project. Avoid unnecessary frameworks, paid services, complex infrastructure, and premature optimization.
+11. Before each phase, read this phase prompt and relevant GSD project instructions. Use the installed GSD version's actual available commands/workflow; do not invent command names. If GSD is unavailable, report that clearly and continue only with a conservative documented plan if safe.
+12. At the end of each phase: run appropriate local checks, report files changed, commands/tests run and actual results, unresolved issues, and the exact next phase. Do not start the next phase until the user explicitly asks.
+13. Do not delete working sketches, firmware, source files, test assets, or documentation. Preserve a backup before any necessary destructive change and ask first.
+14. Do not silently change the selected technology stack or architecture. If a decision becomes technically impossible, explain the evidence and ask before substituting.
+
+CONFIRMED PROJECT CONTEXT
+-------------------------
+Robot: DORURU.
+
+Controller:
+- Seeed XIAO ESP32-S3 Sense.
+- Camera: OV3660 (preserve OV3660 as the documented sensor; do not silently substitute OV2640; verify actual physical module and pin definition against the repository/board configuration).
+- Display: 2.8-inch ILI9341 SPI TFT, 240x320.
+- Audio output: MAX98357A amplifier + speaker.
+- Microphone: onboard XIAO ESP32-S3 Sense PDM microphone (PDM_DATA = GPIO41, PDM_CLK = GPIO42; exact working capture path must be confirmed from the existing test code / board configuration).
+- Motor driver: MX1508.
+- Motors: two DC geared motors; a shared product screenshot showed a 3V N20 micro turbo worm geared motor, 16 RPM. Verify actual locally purchased motor specifications from existing project notes or user-provided evidence; do not assume the screenshot fully identifies both installed motors.
+- microSD: not confirmed. Do not assume a card or slot is available.
+- Distance/obstacle sensors: not confirmed.
+- Wheel encoders: not confirmed.
+- Battery and regulator ratings: not finalized in the available project context.
+
+CONFIRMED WIRING — PRESERVE EXACTLY
+-----------------------------------
+Display (ILI9341):
+- VCC = 5V (VBUS/5V as recorded by user; acceptable only if the specific display breakout includes an onboard regulator and compatible input circuitry, while SPI logic must remain 3.3V compatible; verify display breakout's electrical requirements in code/docs before powering; do not assume all ILI9341 modules are identical; do not change wiring)
+- GND = GND
+- CS = GND (intentionally grounded so the display is permanently selected; configure software with CS = -1 where supported and require a hardware reset pulse on D8/GPIO7 during initialization. Note: some ILI9341 modules may not behave reliably with CS permanently tied to GND; if the already-connected display works, preserve this wiring and only investigate a GPIO-based CS alternative if an actual display failure is observed and the user explicitly approves rewiring)
+- RESET = D8 (GPIO7)
+- D/C = D7 (GPIO44)
+- MOSI/SDI = D9 (GPIO8)
+- SCK = D10 (GPIO9)
+- MISO = not connected (-1)
+- LED = 3V3
+
+Audio amplifier (MAX98357A):
+- LRC = D6 (GPIO43)
+- BCLK = D5 (GPIO6)
+- DIN = D4 (GPIO5)
+- GND = GND
+- VIN = 3V3
+
+Motor driver (MX1508):
+- IN1 = D3 (GPIO4)
+- IN2 = D2 (GPIO3)
+- IN3 = D1 (GPIO2)
+- IN4 = D0 (GPIO1)
+
+Reserved Internal Sense Expansion Pins (DO NOT REUSE):
+- Onboard PDM Microphone: PDM_DATA = GPIO41, PDM_CLK = GPIO42 (strictly reserved for microphone input; never assign to motors, display, speaker, sensors, or other peripherals).
+- Onboard Camera (OV3660): dedicated internal XIAO ESP32-S3 Sense camera pins (strictly reserved for camera interface; never reassign).
+
+ESP32-S3 Hardware & Peripheral Constraints (Verify Against Framework/Board Package):
+- UART0 Pin Conflict on D6/D7: D6 (GPIO43, MAX98357A LRC) and D7 (GPIO44, ILI9341 D/C) are the ESP32-S3 default UART0 TX/RX pins. Avoid UART0 serial logging and ensure bootloader/hardware UART activity does not toggle GPIO43/GPIO44 during operation. Use native USB CDC for Serial debugging.
+- I2S Peripheral Allocation: On ESP32-S3, PDM RX support is tied to I2S_NUM_0. Reserve I2S_NUM_0 for the onboard PDM microphone (GPIO41/GPIO42) and assign I2S_NUM_1 to the MAX98357A speaker (D4/D5/D6). Coordinate audio drivers and verify simultaneous PDM RX + I2S TX compatibility with the actual ESP-IDF/Arduino framework and libraries before assuming concurrent operation works.
+- Custom SPI Routing: Standard XIAO ESP32-S3 default SPI pin macros do not match the confirmed display wiring. Explicitly configure custom SPI pins in software: SCK = GPIO9 (D10), MOSI = GPIO8 (D9), MISO = -1, CS = -1, while preserving D/C = GPIO44 (D7) and RESET = GPIO7 (D8).
+- Octal PSRAM: XIAO ESP32-S3 Sense includes 8MB Octal PSRAM (OPI). Configure and verify OPI PSRAM support in build settings and runtime checks rather than assuming it is enabled by default.
+
+Do not reassign pins, change wiring, or silently add peripherals. Convert D-pin labels to GPIO numbers only after checking the exact XIAO ESP32-S3 pin mapping and existing working sketches. The current known mapping commonly used for this board is D0=GPIO1, D1=GPIO2, D2=GPIO3, D3=GPIO4, D4=GPIO5, D5=GPIO6, D6=GPIO43, D7=GPIO44, D8=GPIO7, D9=GPIO8, D10=GPIO9; verify against the board definition used by this repository before implementation.
+
+LOCKED ARCHITECTURE DECISIONS
+-----------------------------
+- Connectivity: hybrid Wi-Fi + limited offline fallback.
+- AI reasoning: cloud Gemini API (model selection must remain configurable via backend environment variables; never hardcode a model name).
+- Interaction: voice-first.
+- Memory: session-only; no persistent personal conversation memory by default.
+- Backend: Python FastAPI.
+- STT: local model on a backend computer, initial candidate faster-whisper (do not assume CUDA/GPU availability without hardware/driver verification).
+- TTS: local model on a backend computer, initial candidate Piper.
+- Wake word: local detection on the ESP32 if technically supported with acceptable memory/latency; assess ESP-SR/WakeNet or another compatible implementation against actual board support, 8MB OPI PSRAM availability, and XIAO Sense PDM microphone integration. Do not guarantee wake-word support prior to testing; maintain push-to-talk as a required fallback. Do not upload always-on microphone audio to cloud.
+- Vision: hybrid — on-demand capture plus explicitly selected events; no continuous image upload by default.
+- Movement: desired autonomous capability, but execution must remain local and safety-bounded. Voice commands include come here, go back, forward, reverse, left, right and stop. A normal camera alone does not provide safe autonomous navigation.
+- College information: verified college knowledge base with retrieval (RAG); Gemini should answer general questions and use retrieved college facts for institutional questions.
+- Development backend host: initially assume the user's ASUS TUF A15 laptop as the local development/server machine, but keep backend portable so it can later move to a mini PC. This is a provisional deployment target, not a requirement that the laptop always be present in the final robot.
+
+SYSTEM ARCHITECTURE
+-------------------
+DORURU hardware controller (ESP32):
+- real-time hardware control
+- local wake-word detection where supported (with push-to-talk fallback)
+- audio capture/playback interface (coordinated I2S_NUM_0 PDM RX and I2S_NUM_1 speaker TX)
+- TFT state/expression rendering (custom SPI pin map, CS = -1, D8 reset pulse)
+- camera capture (OV3660)
+- motor commands and local safety
+- sensor acquisition
+- Wi-Fi communication with backend
+- limited offline functions
+
+Local backend computer (initially ASUS TUF A15):
+- FastAPI API server
+- local STT (faster-whisper candidate)
+- local TTS (Piper candidate)
+- AI orchestration
+- Gemini API client (configurable model via environment variable)
+- college knowledge retrieval service
+- session manager
+- vision request orchestration
+- device communication / command validation
+
+Cloud:
+- Gemini API only for model intelligence and supported image understanding.
+- Do not use managed cloud STT/TTS in the default architecture.
+- Keep API usage limits and cost controls.
+
+High-level voice flow:
+Wake word (or push-to-talk fallback) on ESP32 -> capture user utterance -> send audio to local FastAPI -> local STT -> orchestrator -> retrieve college context when relevant -> Gemini API -> local TTS -> return audio to ESP32 -> MAX98357A speaker.
+
+High-level vision flow:
+User request or configured event -> OV3660 capture -> backend receives image -> Gemini vision request -> response returned through normal speech/UI flow.
+
+Movement flow:
+Voice/text intent -> backend may interpret intent -> send bounded high-level command -> ESP32 validates command locally -> local motor/sensor controller -> MX1508 -> motors.
+Safety stop and motor timeout must work locally without backend, Wi-Fi, or Gemini.
+
+PHASE 1 — REPOSITORY AUDIT, GSD BASELINE AND ARCHITECTURE PLAN
+-------------------------------------------------------------
+MASTER PROMPT:
+You are the lead embedded-systems and AI robotics engineer for DORURU. Work in the existing local DORURU-AI repository only. First inspect the complete local repository, branch, working tree, project language/framework, existing firmware, backend, documentation, test assets, .gitignore, and GSD installation/planning files. Do not edit code yet.
+
+Read the installed GSD instructions and determine the exact commands and expected planning structure for this installed version. Inspect any existing GSD project state before creating or changing it. Reconcile the repository's actual state with the architecture in this document. The online GitHub repository URL is reference context only; do not push, commit, publish, or modify GitHub.
+
+Create or update a concise architecture decision record and phase plan in the repository's planning/docs area, following the installed GSD conventions. Include:
+- confirmed hardware and fixed pin map (including reserved internal GPIO41/GPIO42 PDM microphone pins, dedicated OV3660 camera pins, custom SPI routing on GPIO7/8/9/44 with CS=GND/-1, I2S_NUM_0 vs I2S_NUM_1 allocation, UART0 conflict on GPIO43/GPIO44, and 8MB OPI PSRAM requirements)
+- ESP32 responsibilities vs local FastAPI backend responsibilities vs Gemini cloud responsibilities
+- local faster-whisper and Piper candidates
+- local wake-word requirement and push-to-talk fallback
+- hybrid camera flow
+- college RAG knowledge flow
+- session-only memory
+- movement safety and unconfirmed navigation hardware dependencies
+- offline fallback
+- secrets and privacy
+- phase dependency graph
+- risks, assumptions, and open decisions
+
+Hardware Power and Electrical Safety Subsection (Mandatory in Phase 1 Plan):
+Include a dedicated "Hardware Power and Electrical Safety" subsection in the architecture plan that explicitly documents the following as UNRESOLVED requiring physical datasheet and rating verification:
+- Exact motor rated voltage and stall current (verify whether both installed motors match the 3V N20 16 RPM reference screenshot or differ).
+- MX1508 operating voltage range and continuous/peak current limitations relative to the motors.
+- Battery chemistry, nominal voltage, maximum charge voltage, and continuous/peak discharge current capability.
+- Voltage regulator ratings, thermal limits, and power distribution topology.
+- Common ground requirements across battery, motor driver, ESP32, display, and audio amplifier.
+- ESP32 3.3V/5V supply stability and brownout risk during motor startup, direction reversal, and stall conditions.
+- Voltage compatibility across the battery, MX1508 motor supply, ESP32 VBUS/5V and 3.3V rails, ILI9341 display (VCC on VBUS/5V requiring onboard regulator verification, 3.3V SPI logic, 3.3V LED), and MAX98357A (VIN on 3.3V).
+Enforce these strict rules in the plan:
+- Never power motors directly from the ESP32 3.3V pin.
+- Do not invent battery ratings, regulator specs, or motor current values.
+- Do not declare the power distribution system electrically safe until actual component datasheets and physical measurements are verified.
+- Preserve existing physical wiring unless a genuine electrical safety or hardware compatibility issue is demonstrated and the user explicitly approves a wiring change.
+- Never allow software assumptions to replace electrical verification.
+
+Do not implement application features in this phase. Do not change pin assignments. Do not fabricate missing sensors or test results. Run only read-only inspection and planning checks. Report actual repository state, GSD status/version/workflow discovered, planning files created/updated, and any blockers. End by waiting for approval before Phase 2.
+
+PHASE 2 — FIRMWARE FOUNDATION AND HARDWARE ABSTRACTION
+-----------------------------------------------------
+MASTER PROMPT:
+Implement DORURU's ESP32 firmware foundation using the existing repository's framework and conventions. First read the approved Phase 1 plan and GSD phase instructions. Preserve all existing working display and speaker test code; integrate it rather than replacing it.
+
+Create a modular firmware architecture with clear separation for:
+- central board/pin configuration (exact confirmed mapping only)
+- hardware initialization
+- display driver wrapper
+- audio output driver wrapper
+- microphone/audio-input interface
+- camera interface
+- motor-driver interface
+- Wi-Fi/network interface
+- device state model
+- diagnostics/logging
+- safety layer
+
+Critical ESP32-S3 Hardware & Configuration Requirements for Phase 2:
+1. UART0 Conflict & USB CDC Logging:
+   - D6 (GPIO43 = MAX98357A LRC) and D7 (GPIO44 = ILI9341 D/C) are the ESP32-S3 default UART0 TX/RX pins.
+   - Do not use UART0 for Serial logging, as UART0 traffic will toggle GPIO43/GPIO44 and corrupt speaker audio or display commands.
+   - Configure native USB CDC for Serial debug output. If using PlatformIO, inspect and verify compatibility of flags such as ARDUINO_USB_CDC_ON_BOOT=1 and ARDUINO_USB_MODE=1 against the repository's actual XIAO ESP32-S3 Sense board definition and framework version—do not blindly copy build flags. Ensure hardware UART0/bootloader output does not unintentionally disturb GPIO43/GPIO44 during normal operation.
+2. Reserved Onboard PDM Microphone & Camera Pins:
+   - Explicitly reserve GPIO41 (PDM_DATA) and GPIO42 (PDM_CLK) in the central pin map for the onboard XIAO ESP32-S3 Sense PDM microphone.
+   - Explicitly reserve the internal camera pins for the OV3660 camera.
+   - Never assign GPIO41, GPIO42, or camera pins to motors, display, speaker, sensors, or diagnostics.
+3. Coordinated I2S Peripheral Allocation:
+   - On ESP32-S3, PDM RX is supported on I2S_NUM_0. Reserve I2S_NUM_0 strictly for the onboard PDM microphone (GPIO41/GPIO42).
+   - Assign I2S_NUM_1 to the MAX98357A speaker output (DIN=D4/GPIO5, BCLK=D5/GPIO6, LRC=D6/GPIO43).
+   - Coordinate the microphone input interface and speaker output wrapper so they do not compete for the same I2S peripheral. Verify that the active ESP-IDF/Arduino framework version and audio libraries support this I2S_NUM_0 (PDM RX) + I2S_NUM_1 (I2S TX) assignment; if framework-specific constraints exist, document the verified alternative before implementation.
+4. Custom SPI Routing & Display CS/Reset Handling:
+   - Do not rely on default XIAO ESP32-S3 SPI macros or default pin order.
+   - Configure custom SPI pins explicitly: SCK = GPIO9 (D10), MOSI = GPIO8 (D9), MISO = -1, CS = -1, with D/C = GPIO44 (D7) and RESET = GPIO7 (D8).
+   - Because physical CS is intentionally wired to GND (permanently selected), configure software CS = -1 (where supported by the display library) and perform an explicit hardware reset pulse on D8 (GPIO7) during display initialization.
+   - Document that VCC is connected to VBUS/5V (valid only for display breakouts with an onboard regulator and 3.3V-compatible SPI logic) and that if a future display failure occurs due to CS=GND, rewiring to a GPIO CS pin requires explicit user approval.
+5. Octal PSRAM (8MB OPI) Configuration & Runtime Check:
+   - Configure and verify 8MB Octal PSRAM support in Phase 2 so it is ready for Phase 5 camera buffers and Phase 10 wake-word models.
+   - In PlatformIO, verify compatibility of settings such as board_build.arduino.memory_type = qio_opi and -DBOARD_HAS_PSRAM against the actual board package and framework version before applying. In Arduino IDE/CLI, verify the OPI PSRAM board option.
+   - Implement a runtime PSRAM availability and size check at boot (logging actual detected PSRAM) with a safe, graceful fallback state if PSRAM is unavailable. Do not claim that enabling PSRAM flags alone guarantees camera or ESP-SR compatibility.
+
+General Requirements:
+- preserve the exact wiring in this document
+- do not invent GPIO assignments
+- avoid blocking delays in the main control loop where possible
+- use clear initialization status and error reporting
+- provide safe startup states; motors must remain stopped after boot
+- do not activate motors automatically
+- do not add cloud credentials to firmware
+- avoid unnecessary dynamic allocation and memory-heavy abstractions
+- compile using the repository's actual board and framework configuration
+
+Add a firmware README describing build/upload instructions and verified build flags based on actual project configuration. Add or update tests where feasible. Run compile/static checks and report exact output. Do not commit or push. Stop after this phase.
+
+PHASE 3 — MOTOR CONTROL AND LOCAL SAFETY FOUNDATION
+---------------------------------------------------
+MASTER PROMPT:
+Implement controlled motor operation for DORURU using the existing MX1508 wiring: IN1=D3, IN2=D2, IN3=D1, IN4=D0. Do not alter wiring or pins.
+
+Inspect the current motor test code and actual motor specifications available in the repository. Implement a motor abstraction with:
+- stop
+- forward
+- reverse
+- left pivot / right pivot (only if supported by the existing two-motor mechanical layout)
+- bounded speed/PWM where supported
+- command duration limit
+- automatic stop timeout
+- emergency stop command with highest priority
+- startup default STOP
+- stop on Wi-Fi/backend command loss
+- input validation and rejection of unknown commands
+
+Do not claim distance-accurate movement without wheel encoders. If encoders are absent, support only bounded time-based movement and label it approximate. Do not claim obstacle avoidance without validated distance/obstacle sensors. Add sensor interfaces as disabled/unavailable where hardware is not confirmed. Never let Gemini or the backend directly drive GPIO pins; only validated high-level commands may reach the local safety controller.
+
+Electrical Safety & Power Constraints:
+- Do not invent motor current ratings, MX1508 thermal/current limits, or battery specifications.
+- Never power motors from the ESP32 3.3V rail.
+- Ensure firmware ramp/PWM limits and startup defaults help mitigate sudden current spikes, while documenting that software limits do not replace physical verification of battery, regulator, common ground, and motor stall current ratings from Phase 1.
+
+Test motor logic using mocks/unit tests where possible. Hardware movement tests must be explicitly requested by the user and must start with wheels safely lifted or the chassis secured. Document actual test evidence only. Do not commit or push.
+
+PHASE 4 — DISPLAY STATES, EXPRESSIONS AND ROBOT PERSONA
+------------------------------------------------------
+MASTER PROMPT:
+Build DORURU's TFT user interface on the existing working ILI9341 display setup. Preserve its confirmed wiring and working initialization. Do not change display pins.
+
+Display Hardware & SPI Configuration Requirements:
+- Use the exact custom SPI pin mapping established in Phase 2: SCK = GPIO9 (D10), MOSI = GPIO8 (D9), MISO = -1, CS = -1, D/C = GPIO44 (D7), RESET = GPIO7 (D8). Do not use default board SPI pin macros.
+- Verify the exact initialization API of the repository's chosen display library so that custom SPI pins and CS = -1 (since physical CS is grounded to GND) are honored without bus contention.
+- Ensure the initialization sequence performs a clean hardware reset pulse on D8 (GPIO7) before sending SPI commands.
+- Ensure D/C on D7 (GPIO44) is never disturbed by UART0 serial activity.
+- Note in display driver documentation that VCC is wired to VBUS/5V (assuming an onboard regulator on the breakout with 3.3V SPI logic) and CS is hardwired to GND; if hardware display desynchronization ever occurs on this specific ILI9341 module, report it rather than suggesting unapproved rewiring.
+
+Create a lightweight display state system with readable, responsive screens for:
+- booting
+- ready/idle
+- wake-word detected
+- listening
+- processing/thinking
+- speaking
+- camera capture/vision processing
+- Wi-Fi disconnected/offline
+- error
+- motor movement
+- emergency stop
+
+Give the robot a consistent friendly personality named DORURU. Do not use WALL-E branding or name. Keep animations efficient for ESP32 memory and frame rate. Avoid blocking the audio, motor safety, or communication tasks. Use clear icons/text and provide a fallback if an animation fails.
+
+Add a display demo/test mode that does not move motors. Verify compilation and report actual display test evidence. Do not commit or push.
+
+PHASE 5 — CAMERA CAPTURE AND VISION TRANSPORT
+---------------------------------------------
+MASTER PROMPT:
+Implement OV3660 camera capture and a safe image-transfer interface for DORURU, using the existing board/camera configuration and repository test code. Do not alter the confirmed camera wiring or assume additional camera hardware.
+
+Camera Sensor & PSRAM Requirements:
+- Preserve OV3660 as the user's documented camera sensor; do not silently replace it with OV2640 in documentation or code.
+- Inspect the physical camera module initialization, sensor PID detection, and XIAO ESP32-S3 Sense camera pin definitions in the repository during implementation. Configure the esp_camera driver specifically for the verified sensor and pin map rather than assuming generic sensor compatibility.
+- Verify runtime 8MB Octal PSRAM (OPI) availability before allocating high-resolution framebuffers. Size framebuffers and JPEG quality according to actual measured free PSRAM/heap, and provide a safe fallback or clear error state if PSRAM is unavailable.
+
+Vision mode is HYBRID:
+1. On-demand: user asks DORURU to look at something; capture one image or a small controlled burst.
+2. Selected events: capture only for explicitly configured events.
+3. No continuous image streaming or continuous cloud upload by default.
+
+Requirements:
+- validate camera initialization and capture errors
+- manage frame buffers carefully
+- choose resolution/quality based on actual memory limits
+- release buffers after use
+- transfer image to backend through an authenticated local API
+- do not store images permanently by default
+- show camera/processing state on TFT
+- handle Wi-Fi loss gracefully
+- keep Gemini API credentials on backend only
+
+Do not implement person tracking or autonomous visual navigation unless separately approved and supported by verified hardware. Add mock tests for transport and document real camera test evidence. Do not commit or push.
+
+PHASE 6 — FASTAPI BACKEND FOUNDATION AND DEVICE API
+--------------------------------------------------
+MASTER PROMPT:
+Create DORURU's Python FastAPI backend in the existing repository, following the approved architecture and GSD plan. The initial development host is the ASUS TUF A15 laptop, but keep deployment portable to a mini PC.
+
+Implement a maintainable backend structure for:
+- application entry point and configuration (including environment-driven configuration for Gemini model selection, STT/TTS model paths, compute device, and timeouts; never hardcode a Gemini model name)
+- health/status endpoint
+- device registration/identity using a safe per-device credential mechanism
+- audio upload endpoint for local STT
+- text query endpoint
+- response/audio delivery contract
+- image upload endpoint
+- bounded movement-intent endpoint
+- session manager with temporary in-memory state
+- service interfaces for STT, TTS, Gemini, college retrieval and vision
+- structured logging and error handling
+
+Use Pydantic request/response schemas. Validate payload sizes and media types. Set request timeouts and safe error responses. Do not expose API keys. Use environment variables and .env.example placeholders. Ensure .env, credentials and generated private data are ignored by Git.
+
+Do not introduce a database unless the approved plan demonstrates a concrete need; session memory is temporary and in-memory initially. Do not add authentication complexity beyond what the local robot/backend communication needs, but do not leave a network-exposed unauthenticated control endpoint. Do not expose the backend publicly by default.
+
+Add automated tests for API validation, session lifecycle and command rejection. Run tests and lint/type checks available in the repo. Do not commit or push.
+
+PHASE 7 — LOCAL SPEECH: FASTER-WHISPER STT AND PIPER TTS
+-------------------------------------------------------
+MASTER PROMPT:
+Implement local speech processing on the backend computer. Default candidates are faster-whisper for speech-to-text and Piper for text-to-speech. Before installation or model download, inspect the ASUS TUF A15 OS, CPU, RAM, GPU and available storage if accessible; do not assume CUDA, cuDNN, or a specific GPU backend is available or configured even if an NVIDIA GPU is present. Verify actual runtime support and select a compatible model size and compute mode (such as CPU int8 or verified CUDA float16/int8) with automatic or configurable CPU fallback. Keep model choices configurable.
+
+STT requirements:
+- accept recorded audio from ESP32 through FastAPI
+- validate codec, sample rate, duration and payload size
+- convert/resample only when needed
+- run local faster-whisper inference
+- return transcript, language if detected, processing duration and clear errors
+- avoid retaining raw audio after processing unless explicitly configured for debugging
+- support cancellation/timeouts and concurrency limits
+
+TTS requirements:
+- use local Piper voice model
+- select a suitable voice/language only after checking available compatible voices
+- generate audio in a format the ESP32 playback path (MAX98357A on I2S_NUM_1) can handle
+- resample/convert server-side if needed
+- return audio efficiently
+- cache only reusable generated speech if enabled and privacy-safe
+
+Performance:
+- benchmark cold-start and warm inference separately
+- record real measured latency on the actual machine
+- do not promise a latency target without measurement
+- make model path, device, compute type, voice and audio settings configurable
+- gracefully report model-not-installed or insufficient-resource states
+
+Keep the service interfaces replaceable so another local model can be substituted later. Do not use paid managed STT/TTS by default. Do not upload user audio to Gemini. Do not commit or push.
+
+PHASE 8 — GEMINI AI ORCHESTRATION AND SESSION-ONLY CONVERSATION
+----------------------------------------------------------------
+MASTER PROMPT:
+Integrate Google Gemini API as DORURU's general conversational intelligence through the FastAPI backend. Use the currently supported official Google GenAI SDK/API approach after checking the installed SDK and official current documentation.
+
+Model Configuration & Security Rules:
+- Never hardcode a Gemini model name anywhere in the codebase.
+- Load the Gemini model identifier exclusively from backend configuration / environment variables (with a documented placeholder in .env.example) so the model remains configurable and replaceable as Google updates model availability.
+- Keep the Gemini API key strictly in backend environment variables; never expose it in ESP32 firmware, frontend code, logs, error responses, or tracked files.
+
+Requirements:
+- central AI orchestration service
+- configurable system instruction establishing DORURU's identity and helpful voice-first style
+- support general questions and follow-up conversation
+- session-only context stored temporarily in memory
+- expire/clear session context on configured timeout, explicit reset and backend restart
+- set sensible token/output limits, request timeouts and error handling
+- handle rate limits, quota exhaustion, deprecated/unavailable model errors, and network failure gracefully
+- never claim to know facts not supplied by the model context or verified knowledge sources
+- no automatic motor action from free-form model output
+
+Add mocked tests so tests do not require a real API key. Add an optional manual smoke-test procedure that the user can run with their own key. Do not print or expose the key. Do not commit or push.
+
+PHASE 9 — COLLEGE KNOWLEDGE BASE AND RAG
+---------------------------------------
+MASTER PROMPT:
+Implement DORURU's college-specific knowledge system using retrieval-augmented generation (RAG). The knowledge base must contain only documents supplied or explicitly approved by the user. Do not invent college history, faculty names, dates, departments, achievements, events or statistics.
+
+Start with a simple maintainable document ingestion/retrieval design:
+- support PDF and text/Markdown documents where practical
+- extract text and metadata
+- preserve source filename, section/page where available, and last-updated date
+- split documents into sensible chunks
+- use a configurable embedding/retrieval implementation
+- begin with the simplest reliable local retrieval option; add a vector database only if scale or measured retrieval quality requires it
+- retrieve relevant chunks for college-specific questions
+- pass retrieved context and source metadata to Gemini
+- instruct Gemini to answer only from retrieved evidence for institutional facts
+- if evidence is missing or conflicting, say the information is not verified and ask for an authoritative source
+- distinguish general questions from college-specific questions
+- provide a way to update/re-index documents without changing application code
+
+Create a documented empty knowledge-base structure and sample template documents clearly marked as examples/placeholders, not factual college records. Add tests for retrieval, source attribution, missing evidence and conflicting documents. Do not commit or push.
+
+PHASE 10 — LOCAL WAKE-WORD AND VOICE INTERACTION STATE MACHINE
+-------------------------------------------------------------
+MASTER PROMPT:
+Implement local wake-word activation and the voice interaction state machine for DORURU. Evaluate the supported ESP32-S3 local wake-word option (such as ESP-SR / WakeNet where compatible) against the exact XIAO ESP32-S3 Sense board definition, Arduino/ESP-IDF framework version, 8MB OPI PSRAM configuration, and onboard PDM microphone integration in this repository. Do not assume a wake-word library or model is compatible or guaranteed to work until verified from official documentation and actual build/runtime evidence.
+
+Hardware & Audio Coordination Constraints:
+- Use the reserved onboard PDM microphone pins (PDM_DATA = GPIO41, PDM_CLK = GPIO42) assigned to I2S_NUM_0, while speaker output remains on I2S_NUM_1 (MAX98357A on D4/GPIO5, D5/GPIO6, D6/GPIO43).
+- Verify that the wake-word engine (e.g., ESP-SR audio front-end / WakeNet) and PDM microphone capture on I2S_NUM_0 coexist cleanly with I2S_NUM_1 speaker playback and OPI PSRAM without peripheral lockups, DMA conflicts, or heap exhaustion.
+- Integration of ESP-SR/WakeNet with the XIAO Sense PDM microphone under Arduino/PlatformIO can be non-trivial; if framework or library constraints prevent simultaneous operation or block ESP-SR initialization, document the exact technical blocker and rely on the mandatory push-to-talk / serial / manual trigger fallback rather than forcing unstable code or uploading continuous audio to the cloud.
+
+Requirements:
+- microphone monitoring remains local (privacy-first architecture)
+- no continuous raw audio upload to the backend or cloud by default
+- wake-word detection (or push-to-talk fallback trigger) transitions the device into listening state
+- capture a bounded utterance with start/end handling or a practical voice activity detection strategy
+- send only the captured utterance to local FastAPI
+- receive transcript/processing/speaking states
+- prevent the robot from treating its own speaker output as a new user command where possible (echo/retrigger mitigation and coordinating I2S_NUM_0 capture with I2S_NUM_1 playback)
+- include timeout, cancel and retry behaviour
+- display listening/thinking/speaking states
+- stop/cancel voice interaction cleanly
+- maintain a working push-to-talk or serial/manual fallback at all times for development and in case local wake-word integration is unsupported or unstable
+- make wake phrase configurable only if supported by the chosen engine
+
+Measure actual RAM/PSRAM/flash use and wake detection behaviour. Do not fabricate accuracy figures. Do not commit or push.
+
+PHASE 11 — HYBRID VISION WITH GEMINI
+-----------------------------------
+MASTER PROMPT:
+Connect the Phase 5 OV3660 image-capture flow to the Phase 6 FastAPI backend vision service and the Phase 8 Gemini orchestration layer's supported image-input capability. Use current official SDK/API documentation and the environment-configured Gemini model (do not hardcode a model name; keep model selection configurable via backend environment variables). Keep the API key server-side only.
+
+Requirements:
+- only process images on explicit user request or configured selected events
+- no continuous upload by default
+- validate image type, dimensions and size
+- compress/resize only when appropriate and preserve enough detail for the request
+- send image with a clear user question/context
+- return a concise answer to the normal response pipeline
+- avoid retaining image data after processing by default
+- handle unsupported image formats, network errors, quota and timeouts
+- display capture/analysis status on DORURU
+
+Do not claim continuous scene understanding, person following, object tracking or safe navigation. Those require separately validated capabilities. Add mocked tests and a manual test procedure. Do not commit or push.
+
+PHASE 12 — MOVEMENT COMMAND INTERPRETATION AND AUTONOMY READINESS
+-----------------------------------------------------------------
+MASTER PROMPT:
+Implement the safe movement-intent layer for DORURU. Support clearly bounded commands such as STOP, FORWARD, REVERSE, TURN_LEFT and TURN_RIGHT. Natural-language phrases such as "come here" and "go back" may be mapped to these intents, but do not pretend "come here" can locate the user without a verified localization/person-detection capability.
+
+Architecture:
+- Gemini/backend may interpret language into a strict structured intent
+- backend validates schema and allowed command range
+- ESP32 independently validates every command
+- local motor controller enforces speed/duration bounds and stop timeout
+- local emergency stop always has priority
+- loss of backend/Wi-Fi or stale command causes stop
+- movement commands never execute directly from arbitrary model-generated text
+
+Navigation capability levels:
+Level 1: bounded timed movement using current motors; distance is approximate.
+Level 2: obstacle-aware movement only after compatible distance sensors are installed, wired and validated.
+Level 3: odometry-based movement only after wheel encoders are installed and validated.
+Level 4: user-following or destination navigation only after localization/person-tracking hardware and algorithms are separately designed and validated.
+
+Do not claim Levels 2–4 if their hardware is not confirmed. Create clean sensor interfaces and feature flags with safe disabled defaults. If no obstacle sensor exists, autonomous navigation must remain disabled; provide only supervised bounded movement. Do not alter the fixed wiring. Do not commit or push.
+
+PHASE 13 — OFFLINE FALLBACK, SESSION LIFECYCLE AND RECOVERY
+----------------------------------------------------------
+MASTER PROMPT:
+Implement DORURU's hybrid connectivity behaviour and session lifecycle.
+
+Online:
+- local wake-word (or push-to-talk fallback) and hardware control
+- local STT/TTS on backend computer
+- Gemini general reasoning
+- RAG college retrieval
+- on-demand Gemini vision
+- backend/device status exchange
+
+Offline:
+- local emergency stop
+- motors stop on command timeout/network loss
+- TFT offline status
+- basic locally defined movement only when safe and explicitly enabled
+- local wake-word/manual fallback only if supported
+- no Gemini, cloud vision or remote answer claims
+- do not claim cloud conversation works offline
+
+Implement reconnect/backoff, health checks, request cancellation and stale-command rejection. Session memory must be cleared on reset/expiry as specified. Ensure network recovery cannot replay old motor commands. Add tests for network loss, reconnect, session expiry and stale command rejection. Do not commit or push.
+
+PHASE 14 — FULL SYSTEM INTEGRATION AND USER EXPERIENCE
+----------------------------------------------------
+MASTER PROMPT:
+Integrate all completed DORURU modules without changing confirmed wiring or replacing working components.
+
+End-to-end scenarios:
+1. Wake phrase (or push-to-talk fallback) -> utterance capture (I2S_NUM_0 PDM) -> local STT -> Gemini general answer -> local Piper TTS -> speaker (I2S_NUM_1).
+2. College question -> RAG retrieval -> Gemini evidence-grounded answer -> TTS.
+3. User asks DORURU to look -> OV3660 capture -> backend -> Gemini vision -> spoken answer.
+4. Bounded movement command -> intent validation -> ESP32 safety validation -> MX1508.
+5. Emergency stop works during idle, listening, speaking, network loss and movement.
+6. Wi-Fi loss -> safe motor stop -> offline UI/fallback -> reconnect without replaying stale commands.
+7. Session expiry/reset clears temporary conversation context.
+
+Use integration tests and mocks first. Then provide a controlled manual hardware test checklist. Do not run risky motor tests automatically. Verify resource use (including PSRAM, heap, and I2S/SPI stability), task interactions, audio playback, camera buffer lifecycle, request timeouts and failure recovery. Document known limitations honestly. Do not commit or push.
+
+PHASE 15 — GSD FINAL REVIEW, SECURITY, QUALITY AND RELEASE READINESS
+-------------------------------------------------------------------
+MASTER PROMPT:
+Perform a final independent engineering review of DORURU-AI using the installed GSD workflow. First inspect the actual installed GSD version and its instructions; use only supported commands. Compare the implemented repository against the approved architecture, phase plan, decisions and acceptance criteria.
+
+Review:
+- architecture consistency
+- pin map unchanged (including reserved GPIO41/42 PDM mic pins, dedicated OV3660 camera pins, custom SPI on GPIO7/8/9/44 with CS=GND/-1, I2S_NUM_0 vs I2S_NUM_1 split, and UART0 conflict mitigation on GPIO43/44)
+- working LCD/speaker code preserved
+- firmware modularity, OPI PSRAM verification, and safe startup
+- motor timeout, local emergency stop, and electrical safety documentation truthfulness
+- no unsafe cloud-to-GPIO path
+- STT/TTS actually local by default (with verified CPU/GPU configuration)
+- Gemini key server-side only and Gemini model name configurable via environment variables (not hardcoded)
+- RAG grounding and source metadata
+- session-only memory lifecycle
+- wake-word privacy and push-to-talk fallback readiness
+- vision on-demand/selected-event policy and OV3660 configuration accuracy
+- offline fallback truthfulness
+- navigation claims match installed sensors/encoders
+- no secrets in tracked files
+- .gitignore and .env.example
+- dependencies pinned or bounded appropriately
+- tests, build, lint and static checks
+- README and setup instructions
+- actual performance measurements vs unverified claims
+
+Run the GSD project's supported audit/verification/review workflow. Do not merely state "GSD verified"; report exact commands/actions and actual outputs. Identify critical, high, medium and low issues. Fix only safe, clearly in-scope issues; do not make architectural or hardware changes without approval. Re-run affected checks after fixes.
+
+Produce a final local report with:
+- completed phases
+- acceptance criteria status
+- tests/builds and results
+- unresolved issues
+- known hardware limitations
+- measured latency/resource use, if actually measured
+- setup and run instructions
+- manual demonstration checklist
+- recommended next steps
+
+ABSOLUTE: do not git commit, do not git push, do not publish, do not create a PR. Leave all changes local and report the final git status.
+
+PHASE DEPENDENCY GRAPH
+----------------------
+Phase 1: Repository/GSD audit, architecture & electrical safety plan
+    |
+    v
+Phase 2: Firmware foundation (USB CDC, OPI PSRAM, custom SPI, I2S split, reserved pins)
+    |--------------------|--------------------|
+    v                    v                    v
+Phase 3: Motors       Phase 4: Display     Phase 5: Camera (OV3660)
+    |                    |                    |
+    |                    |                    |
+    v                    v                    v
+Phase 6: FastAPI backend foundation & device API
+    |
+    +--> Phase 7: Local STT/TTS (faster-whisper & Piper)
+    |
+    +--> Phase 8: Gemini orchestration (env-configured model)
+                 |
+                 +--> Phase 9: College RAG (depends on Phase 6 + Phase 8)
+                 |
+                 +--> Phase 11: Hybrid Vision (depends on Phase 5 + Phase 6 + Phase 8)
+
+Cross-Phase Dependencies:
+- Phase 7 (Local STT/TTS) depends on Phase 6.
+- Phase 9 (College RAG) depends on Phase 6 + Phase 8.
+- Phase 10 (Local Wake Word & Voice State Machine) depends on Phase 2 (firmware/I2S_NUM_0 PDM foundation & OPI PSRAM) + onboard microphone support + Phase 6 and Phase 7 communication/audio contracts.
+- Phase 11 (Hybrid Vision) depends on Phase 5 (Camera) + Phase 6 (FastAPI Backend) + Phase 8 (Gemini Orchestration).
+- Phase 12 (Movement Intent & Autonomy Readiness) depends on Phase 3 (Motor Control & Safety) + Phase 6 (FastAPI Backend) + Phase 8 (intent parsing, where used); advanced autonomy levels (Levels 2–4) additionally depend on verified sensors/encoders.
+- Phase 13 (Offline Fallback, Session Lifecycle & Recovery) depends on Phases 2, 3, 4, 6, 7, 8, 10, and 12.
+- Phase 14 (Full System Integration) depends on all required modules (Phases 2–13).
+- Phase 15 (Final GSD, Security, Quality & Release Review) depends on Phase 14.
+
+IMPORTANT HARDWARE LIMITATIONS TO KEEP VISIBLE
+----------------------------------------------
+- Normal OV3660 camera does not by itself guarantee obstacle avoidance, localization, person following or safe navigation.
+- MX1508 is a motor driver, not a wheel encoder.
+- Without encoders, distance and turning precision are approximate.
+- Without validated obstacle sensors, autonomous obstacle avoidance must remain disabled.
+- Do not assume a microSD slot/card is present.
+- Do not assume a battery voltage/current rating, regulator capacity, or motor stall current rating; these require physical datasheet and circuit verification.
+- Do not power motors from ESP32 3.3V. Use a suitable motor supply and common ground as required by the actual circuit and component specifications.
+- Display VCC on VBUS/5V is valid only if the display breakout has an onboard regulator with 3.3V-compatible SPI logic; CS tied to GND requires CS = -1 in software and a hardware reset pulse on D8 (GPIO7).
+- D6 (GPIO43) and D7 (GPIO44) overlap default UART0 TX/RX; use native USB CDC for Serial logging so UART0 does not interfere with the speaker or display.
+- GPIO41 (PDM_DATA) and GPIO42 (PDM_CLK) on I2S_NUM_0 are strictly reserved for the onboard PDM microphone, while MAX98357A uses I2S_NUM_1; simultaneous operation and ESP-SR compatibility must be verified on the actual framework/board setup.
+- The fixed user-approved connections are not an invitation to rewire. If a real electrical safety or hardware compatibility issue is found, stop and explain before changing anything.
+
+END OF DOCUMENT
