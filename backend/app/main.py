@@ -32,7 +32,17 @@ from .session.session_manager import SessionManager
 from .session.command_safety import validate_movement_command, MovementCommand, MovementIntent
 
 # Remote Teammate Movement Intent Router & Schemas
-from backend.app.routers.movement import router as movement_router
+from backend.app.routers import (
+    movement_router,
+    health_router,
+    device_router,
+    voice_router,
+    session_router,
+)
+from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from backend.app.schemas.movement import AutonomyCapabilities
 
 # ==============================================================================
@@ -539,9 +549,31 @@ fastapi_app = FastAPI(
     version="1.0.0",
 )
 
-# Register Movement Intent Router from Phase 12
+# Register Phase 6 & Phase 12 FastAPI Routers
+fastapi_app.include_router(health_router)
 fastapi_app.include_router(movement_router)
+fastapi_app.include_router(device_router)
+fastapi_app.include_router(voice_router)
+fastapi_app.include_router(session_router)
 
+@fastapi_app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "error": "HTTP Error", "message": str(exc.detail)}
+    )
+
+@fastapi_app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=422,
+        content={
+            "detail": jsonable_encoder(exc.errors()),
+            "error": "Validation Error",
+            "message": "Invalid request parameters",
+            "details": jsonable_encoder(exc.errors())
+        }
+    )
 
 @fastapi_app.get("/")
 async def root():
@@ -550,14 +582,6 @@ async def root():
         "description": "Educational & Lab Assistant Robot",
         "status": "online",
         "autonomy_level": 1,
-    }
-
-
-@fastapi_app.get("/health")
-async def health_check():
-    return {
-        "status": "healthy",
-        "autonomy": AutonomyCapabilities().model_dump(),
     }
 
 

@@ -7,7 +7,7 @@ updated: 2026-10-30T15:30:00+05:30
 # ROADMAP.md — DORURU-AI Phase-Wise Implementation Roadmap
 
 > **Current Milestone:** DORURU-AI v1.0 — Unified Integration  
-> **Status:** Multi-Phase Verified (Phases 3, 5, 9, 11, 12, 13 Complete)  
+> **Status:** Multi-Phase Verified (Phases 3, 4, 5, 6, 9, 11, 12, 13 Complete)  
 
 ---
 
@@ -18,7 +18,7 @@ updated: 2026-10-30T15:30:00+05:30
 - [x] UART0 conflict resolved via Native USB CDC serial logging
 - [x] 8MB Octal PSRAM (OPI) verified at boot for audio and camera buffers
 - [x] Safe local motor control with MX1508, hardware timeout, and emergency stop (Phase 3 & Phase 13)
-- [ ] ILI9341 2.8" SPI display rendering expressive DORURU persona and system states
+- [x] ILI9341 2.8" SPI display rendering expressive DORURU persona and system states (Phase 4)
 - [ ] Onboard PDM microphone (GPIO41/GPIO42) capturing audio on I2S_NUM_0
 - [ ] MAX98357A I2S amplifier playing audio on I2S_NUM_1
 - [ ] Local faster-whisper STT and Piper TTS running on host computer with CPU fallback
@@ -36,9 +36,9 @@ updated: 2026-10-30T15:30:00+05:30
 - [ ] **Phase 1**: Repository Audit, GSD Baseline and Architecture Plan
 - [ ] **Phase 2**: Firmware Foundation and Hardware Abstraction
 - [x] **Phase 3**: Motor Control and Local Safety Foundation
-- [ ] **Phase 4**: Display States, Expressions and Robot Persona
+- [x] **Phase 4**: Display States, Expressions and Robot Persona
 - [x] **Phase 5**: Camera Capture and Vision Transport
-- [ ] **Phase 6**: FastAPI Backend Foundation and Device API
+- [x] **Phase 6**: FastAPI Backend Foundation and Device API
 - [ ] **Phase 7**: Local Speech: faster-whisper STT and Piper TTS
 - [ ] **Phase 8**: Gemini AI Orchestration and Session-Only Conversation
 - [x] **Phase 9**: College Knowledge Base and RAG
@@ -74,8 +74,9 @@ updated: 2026-10-30T15:30:00+05:30
 ---
 
 ### Phase 4: Display States, Expressions and Robot Persona
-- **Status:** ⬜ Pending
-- **Objective:** ILI9341 SPI TFT state rendering with custom SPI and hardware reset pulse on D8 (GPIO7), displaying booting, idle, listening, thinking, speaking, vision, movement, offline, and error screens for DORURU persona.
+- **Status:** ✅ Complete
+- **Objective:** ILI9341 SPI TFT state rendering with custom SPI (`SCK=GPIO9, MOSI=GPIO8, MISO=-1, CS=-1, DC=GPIO44, RST=GPIO7`) and hardware reset pulse on D8 (GPIO7), displaying booting, idle, listening, thinking, speaking, vision, movement, offline, and error screens for DORURU persona.
+- **Key Artifacts:** `firmware/src/display/ili9341_driver.h`, `firmware/src/display/ili9341_driver.cpp`, `firmware/src/display/doruru_persona.h`, `firmware/src/display/doruru_persona.cpp`, `firmware/src/display/display_interface.h`, `firmware/src/display/display_interface.cpp`, `docs/PHASE_4_DISPLAY_PERSONA.md`, `tests/test_display_persona.py`. Verified with 9/9 unit tests passing.
 
 ---
 
@@ -87,8 +88,9 @@ updated: 2026-10-30T15:30:00+05:30
 ---
 
 ### Phase 6: FastAPI Backend Foundation and Device API
-- **Status:** 🔄 Integrated Foundation
-- **Objective:** Unified FastAPI + Flask backend on host machine with Pydantic request/response schemas, device authentication, vision/session/RAG endpoints, and movement intent contracts.
+- **Status:** ✅ Complete
+- **Objective:** Unified FastAPI + Flask backend on host machine with Pydantic request/response schemas, device authentication, voice/session/RAG endpoints, faster-whisper STT and Piper TTS interfaces, 16kHz audio delivery contract, and bounded movement intent triage.
+- **Key Artifacts:** `backend/app/main.py`, `backend/app/config.py`, `backend/app/logging_config.py`, `backend/app/schemas/` (`device.py`, `voice.py`, `session.py`), `backend/app/services/` (`stt_service.py`, `tts_service.py`, `gemini_service.py`), `backend/app/routers/` (`deps.py`, `health.py`, `device.py`, `voice.py`, `session.py`), `docs/PHASE_6_FASTAPI_BACKEND.md`, `tests/test_fastapi_backend.py`. Verified with 16/16 unit tests passing.
 
 ---
 

@@ -142,9 +142,21 @@ class SessionManager:
                 purged += 1
         return purged
 
+    def get_or_create_session(self, session_id: Optional[str] = None) -> Session:
+        """Gets an existing non-expired session or creates a new one."""
+        if session_id:
+            session = self.get_session(session_id)
+            if session:
+                return session
+        return self.create_session()
+
     def active_session_count(self) -> int:
         with self._lock:
             return len(self._sessions)
+
+    def active_count(self) -> int:
+        """Alias for active_session_count."""
+        return self.active_session_count()
 
     def clear_all(self):
         """Purges all sessions and clears memory."""

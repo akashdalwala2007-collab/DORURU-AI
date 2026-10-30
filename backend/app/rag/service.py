@@ -91,3 +91,6 @@ class CollegeRAGService:
             "prompt_payload": prompt_payload
         }
 
+    # Alias for method compatibility
+    query = answer_query
+

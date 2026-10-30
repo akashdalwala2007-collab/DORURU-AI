@@ -40,8 +40,10 @@ class GeminiVisionService:
         self.model_name = model or config.GEMINI_MODEL
         opt_in = test_mode if test_mode is not None else mock_mode
         if opt_in is not None:
+            self._explicit_test_mode = True
             self.test_mode = bool(opt_in)
         else:
+            self._explicit_test_mode = False
             self.test_mode = getattr(config, "VISION_TEST_MODE", False) or (
                 os.getenv("VISION_TEST_MODE", "false").lower() in ("true", "1", "yes")
             )
@@ -69,9 +71,15 @@ class GeminiVisionService:
         processed_bytes, metadata = validate_and_process_image(image_bytes)
 
         # 2. Check for Missing Credentials or Failed Client Initialization
+        is_test_mode = getattr(self, "test_mode", False)
+        if not getattr(self, "_explicit_test_mode", False):
+            is_test_mode = is_test_mode or getattr(config, "VISION_TEST_MODE", False) or (
+                os.getenv("VISION_TEST_MODE", "false").lower() in ("true", "1", "yes")
+            )
+
         if not self.api_key or not self._client:
             latency_ms = round((time.time() - start_time) * 1000, 2)
-            if self.test_mode:
+            if is_test_mode:
                 # Deterministic mock simulation for opt-in test mode
                 mock_answer = (
                     f"I can see a clean workspace with development equipment in front of me. "
