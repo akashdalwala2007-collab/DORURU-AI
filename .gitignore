@@ -1,0 +1,83 @@
+# DORURU-AI — Git Ignore Configuration
+
+# Secrets and Environment Variables
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+*.pem
+*.key
+*.cert
+secrets.h
+credentials.h
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Embedded / PlatformIO / Arduino
+.pio/
+.pioenvs/
+.piolibdeps/
+.clangd/
+*.bin
+*.elf
+*.hex
+*.exe
+*.o
+*.obj
+
+# Media / Temporary Audio & Image buffers
+*.wav
+*.mp3
+*.pcm
+*.jpg
+*.jpeg
+*.png
+temp_audio/
+temp_images/
+storage/temp/
+
+# Movement & Runtime State
+*movement_sequence_state*.json
+*movement_sequence_state*.tmp
+*.lock
+
+# OS Specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor caches (keep project-level config)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+
