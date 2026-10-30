@@ -1,18 +1,29 @@
 """
-backend/app/main.py - DORURU Vision Transport & Local Device API Server
+backend/app/main.py - DORURU Unified Robot Backend API & Vision Transport Server
 
-Endpoints:
-- GET  /api/v1/health: Health check and status.
-- POST /api/v1/vision/upload: Authenticated local image transfer from XIAO ESP32-S3 Sense.
+Combines:
+1. FastAPI Application: Autonomy Level 1 Movement Intent Router, Device Clock Synchronization,
+   and System Autonomy Health endpoints.
+2. Flask Application: Ephemeral Vision Transport, College RAG Ingestion & Querying,
+   Device Telemetry, and Session Recovery Endpoints.
+3. Unified ASGI Mounting: Mounts Flask via WSGIMiddleware onto FastAPI for production ASGI serving,
+   while providing seamless compatibility for both Flask test_client and FastAPI TestClient.
 """
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
 import time
 import os
 import hmac
 import threading
 from pathlib import Path
+
+# Flask & CORS imports
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+
+# FastAPI imports
+from fastapi import FastAPI
+from fastapi.middleware.wsgi import WSGIMiddleware
+
 from . import config
 from .rag.service import CollegeRAGService
 from .vision.gemini_vision_service import GeminiVisionService
@@ -20,14 +31,30 @@ from .vision.schemas import VisionTriggerType
 from .session.session_manager import SessionManager
 from .session.command_safety import validate_movement_command, MovementCommand, MovementIntent
 
-app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
-CORS(app)
+# Remote Teammate Movement Intent Router & Schemas
+from backend.app.routers.movement import router as movement_router
+from backend.app.schemas.movement import AutonomyCapabilities
 
-@app.errorhandler(413)
+# ==============================================================================
+# FLASK APPLICATION SETUP (Vision, RAG, Session, Device Safety)
+# ==============================================================================
+flask_app = Flask(__name__)
+flask_app.config["MAX_CONTENT_LENGTH"] = config.MAX_CONTENT_LENGTH
+CORS(flask_app)
+
+# In-memory telemetry
+telemetry = {
+    "total_uploads": 0,
+    "auth_failures": 0,
+    "validation_failures": 0,
+    "last_upload_timestamp": None,
+    "last_device_id": None
+}
+
+@flask_app.errorhandler(413)
 def request_entity_too_large(error):
     telemetry["validation_failures"] += 1
-    max_len = app.config.get("MAX_CONTENT_LENGTH", config.MAX_CONTENT_LENGTH)
+    max_len = flask_app.config.get("MAX_CONTENT_LENGTH", config.MAX_CONTENT_LENGTH)
     return jsonify({
         "error": "Payload Too Large",
         "message": f"Payload exceeds maximum allowed limit of {max_len} bytes"
@@ -48,15 +75,6 @@ server_device_state = {
 }
 device_command_lock = threading.Lock()
 
-
-# In-memory telemetry
-telemetry = {
-    "total_uploads": 0,
-    "auth_failures": 0,
-    "validation_failures": 0,
-    "last_upload_timestamp": None,
-    "last_device_id": None
-}
 
 def _authenticate_request():
     """
@@ -80,8 +98,9 @@ def _authenticate_request():
 
     return True, None
 
-@app.route("/api/v1/health", methods=["GET"])
-def health_check():
+
+@flask_app.route("/api/v1/health", methods=["GET"])
+def flask_health_check():
     """Health status endpoint."""
     return jsonify({
         "status": "online",
@@ -90,7 +109,8 @@ def health_check():
         "telemetry": telemetry
     }), 200
 
-@app.route("/api/v1/vision/upload", methods=["POST"])
+
+@flask_app.route("/api/v1/vision/upload", methods=["POST"])
 def upload_vision_frame():
     """
     Authenticated image transport endpoint for DORURU camera frames.
@@ -185,7 +205,8 @@ def upload_vision_frame():
 
     return jsonify(response_payload), 200
 
-@app.route("/api/v1/vision/analyze", methods=["POST"])
+
+@flask_app.route("/api/v1/vision/analyze", methods=["POST"])
 def analyze_vision_json():
     """
     JSON / Base64 vision inquiry endpoint for manual tests and companion apps.
@@ -200,7 +221,7 @@ def analyze_vision_json():
 
     # 2. Enforce MAX_CONTENT_LENGTH before parsing JSON payload or decoding image
     content_length = request.content_length or (len(request.data) if request.data else 0)
-    max_len = app.config.get("MAX_CONTENT_LENGTH", config.MAX_CONTENT_LENGTH)
+    max_len = flask_app.config.get("MAX_CONTENT_LENGTH", config.MAX_CONTENT_LENGTH)
     if content_length > max_len:
         telemetry["validation_failures"] += 1
         return jsonify({
@@ -251,7 +272,7 @@ def analyze_vision_json():
 # PHASE 9: COLLEGE KNOWLEDGE BASE AND RAG ENDPOINTS
 # ==============================================================================
 
-@app.route("/api/v1/rag/query", methods=["POST"])
+@flask_app.route("/api/v1/rag/query", methods=["POST"])
 def rag_query():
     """
     RAG Query Endpoint:
@@ -283,7 +304,8 @@ def rag_query():
         "conflict_details": result.get("conflict_details")
     }), 200
 
-@app.route("/api/v1/rag/reindex", methods=["POST"])
+
+@flask_app.route("/api/v1/rag/reindex", methods=["POST"])
 def rag_reindex():
     """
     Triggers re-indexing of documents in knowledge_base/documents without application restart.
@@ -292,12 +314,13 @@ def rag_reindex():
     total_chunks = rag_service.reindex(force=force)
     return jsonify({
         "status": "success",
-        "message": f"Knowledge base re-indexed successfully",
+        "message": "Knowledge base re-indexed successfully",
         "total_chunks": total_chunks,
         "files_indexed": list(rag_service.retriever.indexed_files.keys())
     }), 200
 
-@app.route("/api/v1/rag/status", methods=["GET"])
+
+@flask_app.route("/api/v1/rag/status", methods=["GET"])
 def rag_status():
     """Returns RAG knowledge base statistics and indexed file manifests."""
     retriever = rag_service.retriever
@@ -315,7 +338,7 @@ def rag_status():
 # PHASE 13: SESSION LIFECYCLE, OFFLINE FALLBACK & SAFETY ENDPOINTS
 # ==============================================================================
 
-@app.route("/api/v1/session/new", methods=["POST"])
+@flask_app.route("/api/v1/session/new", methods=["POST"])
 def session_new():
     """Initializes a new ephemeral conversation session."""
     payload = request.get_json(silent=True) or {}
@@ -338,7 +361,8 @@ def session_new():
         "session": sess.to_dict()
     }), 201
 
-@app.route("/api/v1/session/status", methods=["GET"])
+
+@flask_app.route("/api/v1/session/status", methods=["GET"])
 def session_status():
     """Retrieves session metadata, checking validity and expiration."""
     session_id = request.args.get("session_id")
@@ -354,7 +378,8 @@ def session_status():
         "session": sess.to_dict()
     }), 200
 
-@app.route("/api/v1/session/reset", methods=["POST"])
+
+@flask_app.route("/api/v1/session/reset", methods=["POST"])
 def session_reset():
     """Strictly wipes temporary session memory and creates a refreshed session."""
     payload = request.get_json(silent=True) or {}
@@ -369,7 +394,8 @@ def session_reset():
         "session": fresh.to_dict()
     }), 200
 
-@app.route("/api/v1/device/status", methods=["POST"])
+
+@flask_app.route("/api/v1/device/status", methods=["POST"])
 def device_status_exchange():
     """
     Authenticated status and heartbeat exchange between robot and local backend.
@@ -393,7 +419,8 @@ def device_status_exchange():
         "active_sessions": session_manager.active_session_count()
     }), 200
 
-@app.route("/api/v1/device/command", methods=["POST"])
+
+@flask_app.route("/api/v1/device/command", methods=["POST"])
 def device_movement_command():
     """
     Validates and dispatches a bounded movement command.
@@ -440,7 +467,8 @@ def device_movement_command():
         "command": val_res.command.model_dump()
     }), 200
 
-@app.route("/api/v1/device/emergency_stop", methods=["POST"])
+
+@flask_app.route("/api/v1/device/emergency_stop", methods=["POST"])
 def device_emergency_stop():
     """Engages emergency stop immediately with highest priority."""
     is_authenticated, auth_error = _authenticate_request()
@@ -454,7 +482,8 @@ def device_emergency_stop():
         "message": "Emergency stop activated. All movement commands rejected."
     }), 200
 
-@app.route("/api/v1/device/emergency_stop/reset", methods=["POST"])
+
+@flask_app.route("/api/v1/device/emergency_stop/reset", methods=["POST"])
 def device_emergency_stop_reset():
     """Clears emergency stop after manual operator verification."""
     is_authenticated, auth_error = _authenticate_request()
@@ -468,7 +497,8 @@ def device_emergency_stop_reset():
         "message": "Emergency stop cleared. Movement commands re-enabled."
     }), 200
 
-@app.route("/api/v1/device/capabilities", methods=["GET"])
+
+@flask_app.route("/api/v1/device/capabilities", methods=["GET"])
 def device_capabilities():
     """
     Returns verified online and offline capabilities.
@@ -499,7 +529,53 @@ def device_capabilities():
         ]
     }), 200
 
-if __name__ == "__main__":
-    print(f"Starting DORURU Local Vision Backend on {config.HOST}:{config.PORT}...")
-    app.run(host=config.HOST, port=config.PORT, debug=False)
 
+# ==============================================================================
+# FASTAPI APPLICATION SETUP (Autonomy Level 1 Movement Intent Router)
+# ==============================================================================
+fastapi_app = FastAPI(
+    title="DORURU Robot Backend API",
+    description="Backend AI Orchestrator and Device Communication Service for DORURU",
+    version="1.0.0",
+)
+
+# Register Movement Intent Router from Phase 12
+fastapi_app.include_router(movement_router)
+
+
+@fastapi_app.get("/")
+async def root():
+    return {
+        "robot": "DORURU",
+        "description": "Educational & Lab Assistant Robot",
+        "status": "online",
+        "autonomy_level": 1,
+    }
+
+
+@fastapi_app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "autonomy": AutonomyCapabilities().model_dump(),
+    }
+
+
+# Mount the Flask WSGI app onto FastAPI root so that all /api/v1/* Flask endpoints
+# are cleanly routed when running under ASGI (Uvicorn / FastAPI).
+fastapi_app.mount("/", WSGIMiddleware(flask_app))
+
+# Seamless Test Compatibility & Execution Bridging:
+# 1. Provide .test_client() returning Flask's test client for Flask test suites.
+# 2. Provide .config pointing to Flask's config dictionary.
+# 3. Provide .run() executing Flask's WSGI server for background thread simulation tests.
+fastapi_app.test_client = flask_app.test_client
+fastapi_app.config = flask_app.config
+fastapi_app.run = flask_app.run
+
+# Canonical application export
+app = fastapi_app
+
+if __name__ == "__main__":
+    print(f"Starting DORURU Unified Local Backend on {config.HOST}:{config.PORT}...")
+    flask_app.run(host=config.HOST, port=config.PORT, debug=False)

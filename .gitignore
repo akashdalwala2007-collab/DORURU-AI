@@ -1,10 +1,17 @@
-# DORURU-AI .gitignore
+# DORURU-AI — Git Ignore Configuration
 
-# Environment & Credentials
+# Secrets and Environment Variables
 .env
+.env.local
+.env.*.local
 *.env
-*.env.local
+!.env.example
 secrets.json
+*.pem
+*.key
+*.cert
+secrets.h
+credentials.h
 
 # Python
 __pycache__/
@@ -15,6 +22,7 @@ __pycache__/
 env/
 venv/
 .venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -30,17 +38,53 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+.coverage
+htmlcov/
 
-# PlatformIO & Embedded
+# Embedded / PlatformIO / Arduino
 .pio/
 .pioenvs/
 .piolibdeps/
-*.elf
+.clangd/
 *.bin
+*.elf
 *.hex
+*.exe
+*.o
+*.obj
+*.pdb
+*.ilk
 
-# IDEs & Editors
-.vscode/
+# Media / Temporary Audio & Image buffers
+*.wav
+*.mp3
+*.pcm
+*.jpg
+*.jpeg
+*.png
+temp_audio/
+temp_images/
+storage/temp/
+debug_captures/
+temp/
+tmp/
+*.log
+
+# Movement & Runtime State
+*movement_sequence_state*.json
+*movement_sequence_state*.tmp
+*.lock
+
+# Knowledge Base Generated Cache & Indices
+knowledge_base/index/
+
+# OS Specific
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor caches (keep project-level config)
 .cursor/
 *.suo
 *.user
@@ -48,21 +92,8 @@ wheels/
 *.sln
 *.swp
 *~
-
-# Temporary & Debug Captures
-debug_captures/
-temp/
-tmp/
-*.log
-
-# Binary & Object Artifacts
-*.exe
-*.obj
-*.o
-*.pdb
-*.ilk
-
-# Knowledge Base Generated Cache & Indices
-knowledge_base/index/
-
-
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
