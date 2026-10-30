@@ -447,3 +447,102 @@ def test_sequence_exhaustion_recovery_handshake():
     assert cmd_resp.status_code == 200
     assert cmd_resp.json()["sequence_id"] == 1
 
+
+
+def test_arbitrary_model_text_cannot_execute_directly():
+    """
+    Verifies that raw model-generated text cannot execute directly as a movement command.
+    The /api/v1/movement/command endpoint strictly enforces the validated MovementIntent schema.
+    """
+    clock_reference.sync(device_millis=2000)
+
+    # 1. Sending arbitrary model text payload to /command is rejected with 422
+    arbitrary_payloads = [
+        {"text": "FORWARD"},
+        {"prompt": "DORURU move forward for 2 seconds"},
+        {"model_output": "I am moving forward to you"},
+        {"direction": "INVALID_DIRECTION", "speed_pwm": 150},
+    ]
+    for bad_payload in arbitrary_payloads:
+        resp = client.post("/api/v1/movement/command", json=bad_payload)
+        assert resp.status_code == 422, f"Payload {bad_payload} must be rejected with 422"
+
+
+def test_higher_autonomy_levels_rejected_by_command_endpoint():
+    """
+    Verifies that commands requiring autonomy levels 2, 3, or 4 are rejected by the backend
+    and never dispatched to hardware without verified sensors.
+    """
+    clock_reference.sync(device_millis=2000)
+
+    for forbidden_level in [
+        AutonomyLevel.LEVEL_2_OBSTACLE_AWARE,
+        AutonomyLevel.LEVEL_3_ODOMETRY_BOUNDED,
+        AutonomyLevel.LEVEL_4_FULL_AUTONOMOUS,
+    ]:
+        intent = {
+            "direction": "FORWARD",
+            "speed_pwm": 150,
+            "duration_ms": 1000,
+            "autonomy_level": forbidden_level.value,
+            "is_approximate_timed": False,
+            "user_localization_used": True if forbidden_level == AutonomyLevel.LEVEL_4_FULL_AUTONOMOUS else False,
+            "safety_disclaimer": "test higher level",
+            "original_text": "navigate autonomously",
+        }
+        resp = client.post("/api/v1/movement/command", json=intent)
+        assert resp.status_code == 400
+        assert "autonomy level > 1 cannot be dispatched" in resp.json()["detail"].lower()
+
+
+def test_gemini_interpreted_language_to_strict_structured_intent():
+    """
+    Verifies the full pipeline:
+    Natural language (from Gemini dialogue or user utterance) ->
+    MovementIntentParser (strict bounds & disclaimers) ->
+    Structured MovementIntent ->
+    Clock Sync & Monotonic Sequence Allocation ->
+    MovementCommandPacket (Level 1 only, TTL bounded).
+    """
+    clock_reference.sync(device_millis=8000)
+
+    # Phrase: "DORURU, please come here"
+    intent_req = {"text": "DORURU, please come here"}
+    intent_resp = client.post("/api/v1/movement/intent", json=intent_req)
+    assert intent_resp.status_code == 200
+    intent = intent_resp.json()
+
+    assert intent["direction"] == "FORWARD"
+    assert intent["autonomy_level"] == 1
+    assert intent["is_approximate_timed"] is True
+    assert intent["user_localization_used"] is False
+    assert "does NOT locate user" in intent["safety_disclaimer"]
+
+    # Dispatch to command generator
+    cmd_resp = client.post("/api/v1/movement/command", json=intent)
+    assert cmd_resp.status_code == 200
+    cmd = cmd_resp.json()
+
+    assert cmd["direction"] == "FORWARD"
+    assert cmd["autonomy_level"] == 1
+    assert cmd["sequence_id"] >= 1
+    assert cmd["ttl_ms"] <= 3000
+    assert cmd["timestamp_ms"] >= 8000
+
+
+def test_disabled_sensor_provider_feature_flags():
+    """
+    Verifies that the capabilities endpoint reports Level 1 as active and
+    strictly disables obstacle avoidance, wheel odometry, and user-following.
+    """
+    resp = client.get("/api/v1/movement/capabilities")
+    assert resp.status_code == 200
+    caps = resp.json()
+
+    assert caps["active_level"] == 1
+    assert caps["level_name"] == "Level 1: Bounded Timed Movement"
+    assert caps["obstacle_avoidance_enabled"] is False
+    assert caps["wheel_odometry_enabled"] is False
+    assert caps["user_following_enabled"] is False
+    assert caps["slam_navigation_enabled"] is False
+    assert "autonomous roaming, obstacle avoidance, and user localization are strictly disabled" in caps["disclaimer"].lower()
