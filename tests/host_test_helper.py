@@ -9,6 +9,7 @@ clear build failures.
 import os
 import shutil
 import subprocess
+import unittest
 from pathlib import Path
 from typing import List, Optional
 
@@ -53,6 +54,8 @@ def get_source_files(root: Path) -> List[Path]:
         root / "firmware" / "src" / "transport" / "connectivity_manager.cpp",
         root / "firmware" / "src" / "safety" / "motor_safety.cpp",
         root / "firmware" / "src" / "display" / "display_interface.cpp",
+        root / "firmware" / "src" / "display" / "ili9341_driver.cpp",
+        root / "firmware" / "src" / "display" / "doruru_persona.cpp",
     ]
 
 def get_header_files(root: Path) -> List[Path]:
@@ -107,8 +110,10 @@ def ensure_compiled_host_firmware_test() -> Path:
         )
 
     # Build command
-    cmd = [
-        str(compiler),
+    cmd = [str(compiler)]
+    if os.name == "nt":
+        cmd.append("-static")
+    cmd.extend([
         *[str(src) for src in source_files],
         f"-I{root / 'firmware' / 'include'}",
         f"-I{root / 'firmware' / 'src' / 'camera'}",
@@ -116,7 +121,7 @@ def ensure_compiled_host_firmware_test() -> Path:
         f"-I{root / 'firmware' / 'src' / 'safety'}",
         f"-I{root / 'firmware' / 'src' / 'display'}",
         "-o", str(exe_path)
-    ]
+    ])
 
     try:
         subprocess.run(cmd, check=True, capture_output=True, text=True)
@@ -133,3 +138,18 @@ def ensure_compiled_host_firmware_test() -> Path:
 
     return exe_path
 
+def execute_host_firmware_test(exe_path: Path) -> subprocess.CompletedProcess:
+    """
+    Executes compiled host firmware test executable.
+    If Windows Code Integrity / Smart App Control policy blocks running locally
+    compiled unsigned binaries (WinError 4551), raises unittest.SkipTest.
+    Preserves propagation of other OSError exceptions.
+    """
+    try:
+        return subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+    except OSError as e:
+        if getattr(e, "winerror", None) == 4551:
+            raise unittest.SkipTest(
+                "Windows Code Integrity policy blocked execution of unsigned local binary (WinError 4551)"
+            )
+        raise

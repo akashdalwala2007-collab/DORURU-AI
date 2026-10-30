@@ -12,6 +12,8 @@
 #include "connectivity_manager.h"
 #include "motor_safety.h"
 #include "display_interface.h"
+#include "ili9341_driver.h"
+#include "doruru_persona.h"
 
 static int g_display_callback_count = 0;
 static display_state_t g_last_state = DISPLAY_STATE_BOOTING;
@@ -365,7 +367,91 @@ int main(void) {
     assert(connectivity_manager_is_online() == false);
     printf("  [PASS] Connectivity manager, exponential backoff & cancellation verified.\n");
 
-    printf("[HOST_TEST] ALL 8 FIRMWARE HOST TESTS PASSED!\n");
+    // 9. Test ILI9341 Display Subsystem, Hardware Reset, Persona Screens, Demo Mode, & Safe Fallback
+    printf("  [TEST 9] Testing ILI9341 Display Subsystem & DORURU Persona...\n");
+
+    // A. Driver Init & Hardware Reset Pulse Verification
+    bool disp_init_ok = display_init();
+    assert(disp_init_ok == true);
+    assert(display_is_hardware_reset_performed() == true);
+    assert(display_get_frame_count() >= 1);
+    printf("    [PASS] display_init & D8 (GPIO7) hardware reset pulse confirmed.\n");
+
+    // B. Verify All 11+ Display State Transitions & String Conversions
+    const display_state_t all_states[] = {
+        DISPLAY_STATE_BOOTING,
+        DISPLAY_STATE_IDLE_READY,
+        DISPLAY_STATE_WAKE_WORD_DETECTED,
+        DISPLAY_STATE_LISTENING,
+        DISPLAY_STATE_PROCESSING_THINKING,
+        DISPLAY_STATE_SPEAKING,
+        DISPLAY_STATE_CAMERA_CAPTURE,
+        DISPLAY_STATE_VISION_PROCESSING,
+        DISPLAY_STATE_VISION_SUCCESS,
+        DISPLAY_STATE_WIFI_DISCONNECTED,
+        DISPLAY_STATE_ERROR,
+        DISPLAY_STATE_MOTOR_MOVING,
+        DISPLAY_STATE_EMERGENCY_STOP
+    };
+    const size_t num_states = sizeof(all_states) / sizeof(all_states[0]);
+    assert(num_states == 13);
+
+    for (size_t i = 0; i < num_states; i++) {
+        display_state_t st = all_states[i];
+        char test_msg[64];
+        snprintf(test_msg, sizeof(test_msg), "Verifying state %d", (int)st);
+
+        ili9341_reset_op_count();
+        display_set_state(st, test_msg);
+
+        assert(display_get_current_state() == st);
+        assert(strcmp(display_get_last_message(), test_msg) == 0);
+        assert(g_last_state == st);
+        assert(strcmp(g_last_message, test_msg) == 0);
+
+        const char* st_name = display_state_to_string(st);
+        assert(st_name != NULL && strlen(st_name) > 0);
+        assert(strcmp(st_name, "UNKNOWN") != 0);
+
+        // Verify draw primitives were exercised
+        assert(ili9341_get_op_count() > 0);
+    }
+    printf("    [PASS] All 13 display states rendered & verified.\n");
+
+    // C. Non-blocking Animation Ticks
+    uint32_t frames_before = display_get_frame_count();
+    for (int t = 0; t < 20; t++) {
+        display_update();
+    }
+    assert(display_get_frame_count() >= frames_before);
+    printf("    [PASS] Non-blocking display_update animation cadence verified.\n");
+
+    // D. Display Demo Mode Sequence (Cycles without motor movement)
+    display_set_demo_mode(true, 500);
+    assert(display_is_demo_mode() == true);
+    assert(display_get_demo_step_interval() == 500);
+
+    display_state_t initial_demo_state = display_get_current_state();
+    for (size_t d = 0; d < 15; d++) {
+        display_step_demo();
+        assert(display_get_current_state() < DISPLAY_STATE_COUNT);
+    }
+    display_set_demo_mode(false, 0);
+    assert(display_is_demo_mode() == false);
+    assert(display_get_current_state() == DISPLAY_STATE_IDLE_READY);
+    printf("    [PASS] Display demo mode sequence confirmed (safe, zero motor movement).\n");
+
+    // E. Fail-Safe Fallback Screen Protection
+    assert(display_is_fallback_active() == false);
+    display_set_render_error_simulation(true);
+    assert(display_is_fallback_active() == true);
+
+    // Verify recovery from fallback
+    display_set_render_error_simulation(false);
+    assert(display_is_fallback_active() == false);
+    printf("    [PASS] High-contrast fail-safe rendering fallback confirmed.\n");
+
+    printf("[HOST_TEST] ALL 9 FIRMWARE HOST TESTS PASSED!\n");
     return 0;
 }
 

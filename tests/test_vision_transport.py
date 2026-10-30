@@ -27,7 +27,7 @@ from pathlib import Path
 from PIL import Image
 from backend.app.main import app
 from backend.app import config
-from tests.host_test_helper import ensure_compiled_host_firmware_test
+from tests.host_test_helper import ensure_compiled_host_firmware_test, execute_host_firmware_test
 
 
 def create_valid_mock_jpeg(width=640, height=480, size=None):
@@ -202,7 +202,7 @@ class TestVisionTransport(unittest.TestCase):
         verifying that bursts are strictly clamped to MAX_BURST_FRAMES_LIMIT (3).
         """
         exe_path = ensure_compiled_host_firmware_test()
-        proc = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+        proc = execute_host_firmware_test(exe_path)
         self.assertIn("[PASS] camera_manager_capture_burst (clamped to max 3 frames)", proc.stdout)
 
     def test_framebuffer_lifecycle_simulation(self):
@@ -211,7 +211,7 @@ class TestVisionTransport(unittest.TestCase):
         camera_manager_release_frame, and slot recovery in camera_manager.cpp.
         """
         exe_path = ensure_compiled_host_firmware_test()
-        proc = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+        proc = execute_host_firmware_test(exe_path)
         self.assertIn("[PASS] camera_manager_capture_single & camera_manager_release_frame", proc.stdout)
         self.assertIn("[PASS] Framebuffer slot exhaustion and recovery", proc.stdout)
 
@@ -221,7 +221,7 @@ class TestVisionTransport(unittest.TestCase):
         vision_transport.cpp under offline conditions, verifying fail-fast and zero leaks.
         """
         exe_path = ensure_compiled_host_firmware_test()
-        proc = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+        proc = execute_host_firmware_test(exe_path)
         self.assertIn("[PASS] vision_transport_capture_and_send (network loss graceful recovery)", proc.stdout)
 
 

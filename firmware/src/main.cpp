@@ -88,6 +88,7 @@ void printHelp() {
     Serial.println("  C            : Clear Emergency Stop");
     Serial.println("  H            : Feed Heartbeat Watchdog");
     Serial.println("  T            : Print Motor Telemetry");
+    Serial.println("  D            : Toggle Display Demo Mode (Cycles all screens without motor motion)");
     Serial.println("  V            : Trigger On-Demand Vision Capture & Send");
     Serial.println("  K            : Print Camera Telemetry");
     Serial.println("  ?            : Print Help");
@@ -108,8 +109,9 @@ void setup() {
     Serial.println("  Target: Seeed Studio XIAO ESP32-S3 Sense        ");
     Serial.println("==================================================");
 
-    // 2. Register TFT Display Callback
+    // 2. Register TFT Display Callback & Initialize Display Hardware
     display_register_state_callback(handle_display_state_change);
+    display_init();
     display_set_state(DISPLAY_STATE_BOOTING, "Booting DORURU...");
 
     // 3. Inspect Runtime Octal PSRAM & Heap
@@ -200,6 +202,15 @@ void processCommandLine(const char* line) {
         case 't':
             printTelemetry();
             break;
+
+        case 'D':
+        case 'd': {
+            bool now_active = !display_is_demo_mode();
+            display_set_demo_mode(now_active, 1500);
+            Serial.printf("[CMD] Display Demo Mode: %s (cycles all screens without motor motion)\n",
+                          now_active ? "ENABLED" : "DISABLED");
+            break;
+        }
 
         case 'V':
         case 'v':
@@ -294,7 +305,10 @@ void loop() {
     // 1. Update motor safety state machine (evaluates timeouts & ramps)
     g_motorController.update();
 
-    // 2. Non-blocking USB CDC serial input processing
+    // 2. Non-blocking display animation and demo tick
+    display_update();
+
+    // 3. Non-blocking USB CDC serial input processing
     static char s_lineBuffer[64];
     static size_t s_lineIndex = 0;
     static bool s_discardRemainingLine = false;

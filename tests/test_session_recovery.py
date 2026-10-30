@@ -33,7 +33,7 @@ from backend.app.session.command_safety import (
     MovementCommand,
     MovementIntent
 )
-from tests.host_test_helper import ensure_compiled_host_firmware_test
+from tests.host_test_helper import ensure_compiled_host_firmware_test, execute_host_firmware_test
 
 class TestSessionLifecycleAndRecovery(unittest.TestCase):
     def setUp(self):
@@ -280,7 +280,7 @@ class TestSessionLifecycleAndRecovery(unittest.TestCase):
         - In-flight requests are cancelled on network drop.
         """
         exe_path = ensure_compiled_host_firmware_test()
-        proc = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+        proc = execute_host_firmware_test(exe_path)
 
         self.assertIn("[PASS] Motor safety, watchdog, stale-rejection & e-stop verified", proc.stdout)
         self.assertIn("[PASS] Connectivity manager, exponential backoff & cancellation verified", proc.stdout)

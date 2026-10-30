@@ -25,7 +25,7 @@ import requests
 from PIL import Image
 from backend.app.main import app
 from backend.app import config
-from tests.host_test_helper import ensure_compiled_host_firmware_test
+from tests.host_test_helper import ensure_compiled_host_firmware_test, execute_host_firmware_test
 
 
 
@@ -118,7 +118,7 @@ class TestE2ESimulation(unittest.TestCase):
         through observable firmware behavior.
         """
         exe_path = ensure_compiled_host_firmware_test()
-        proc = subprocess.run([str(exe_path)], capture_output=True, text=True, check=True)
+        proc = execute_host_firmware_test(exe_path)
 
         # Observable firmware behavior assertions
         self.assertIn("[PASS] vision_transport_capture_and_send (network loss graceful recovery)", proc.stdout)
